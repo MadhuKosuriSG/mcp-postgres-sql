@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "type": "stdio",
+      "command": "/Users/madhukosuri/.local/bin/uvx",
+      "args": [
+        "--python",
+        "3.12",
+        "postgres-mcp",
+        "--access-mode=unrestricted",
+        "${DATABASE_URI}"
+      ],
+      "env": {}
+    }
+  }
+}

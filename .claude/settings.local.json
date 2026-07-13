@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(./venv/bin/python -c ' *)",
+      "Bash(./venv/bin/python -)",
+      "Bash(python -c \"import sys; print\\(sys.executable\\)\")"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "postgres"
+  ]
+}
