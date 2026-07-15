@@ -15,6 +15,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     data: Optional[Any] = None
+    tool_calls: list[dict[str, Any]] = []
 
 
 def get_chat_service(request: Request) -> ChatService:
@@ -27,7 +28,7 @@ async def chat(
     chat_service: ChatService = Depends(get_chat_service),
 ) -> ChatResponse:
     try:
-        reply, data = await chat_service.send_message(payload.message)
+        reply, data, tool_calls = await chat_service.send_message(payload.message)
     except ChatServiceError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return ChatResponse(reply=reply, data=data)
+    return ChatResponse(reply=reply, data=data, tool_calls=tool_calls)

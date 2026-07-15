@@ -5,8 +5,10 @@ from fastapi import FastAPI
 
 load_dotenv()
 
+from api.auth import router as auth_router
 from api.chat import router as chat_router
 from api.mcp import router as mcp_router
+from core.db import dispose_engine
 from mcp_server.manager import MCPManager
 from services.chat_service import ChatService
 
@@ -22,6 +24,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     await mcp_manager.shutdown()
+    await dispose_engine()
 
 
 app = FastAPI(
@@ -33,6 +36,7 @@ app.state.chat_service = chat_service
 app.state.mcp_manager = mcp_manager
 app.include_router(chat_router)
 app.include_router(mcp_router)
+app.include_router(auth_router)
 
 
 @app.get("/")

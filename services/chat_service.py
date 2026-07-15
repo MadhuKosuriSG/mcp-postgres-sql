@@ -37,12 +37,15 @@ class ChatService:
         self._mcp_manager = mcp_manager
         self.llm_service = LLMService()
 
-    async def send_message(self, user_message: str) -> tuple[str, Optional[Any]]:
+    async def send_message(
+        self, user_message: str
+    ) -> tuple[str, Optional[Any], list[dict[str, Any]]]:
         """Send the message to the LLM, executing any MCP tool calls it requests.
 
-        Returns (reply_text, data), where data is the structured JSON payload
-        from the last tool call that returned one (e.g. execute_sql rows), so
-        callers get real query results instead of the model's paraphrase of them.
+        Returns (reply_text, data, tool_calls), where data is the structured JSON
+        payload from the last tool call that returned one (e.g. execute_sql rows),
+        and tool_calls is the full trace of every tool invoked along the way
+        (name, arguments, and result), so callers can see how the answer was derived.
         """
         if not self._mcp_manager.is_connected():
             raise ChatServiceError("MCP session is not connected")
@@ -67,6 +70,7 @@ class ChatService:
         ]
 
         last_data: Optional[Any] = None
+        tool_calls_trace: list[dict[str, Any]] = []
 
         try:
             result = await self.llm_service.chat(messages=messages, tools=tools)
@@ -76,14 +80,23 @@ class ChatService:
                 messages.append(message.model_dump(exclude_unset=True))
                 for tool_call in message.tool_calls:
                     arguments = json.loads(tool_call.function.arguments or "{}")
-                    print("#################")
-                    print(arguments)
                     tool_result = await self._mcp_manager.call_tool(
                         tool_call.function.name, arguments
                     )
                     data = _extract_json_content(tool_result)
                     if data is not None:
                         last_data = data
+                    tool_calls_trace.append(
+                        {
+                            "tool": tool_call.function.name,
+                            "arguments": arguments,
+                            "result": [
+                                block.model_dump(mode="json")
+                                for block in tool_result.content
+                            ],
+                            "is_error": tool_result.isError,
+                        }
+                    )
                     messages.append(
                         {
                             "role": "tool",
@@ -97,4 +110,4 @@ class ChatService:
             logger.exception("Chat completion with MCP tool call failed")
             raise ChatServiceError("Failed to execute query against MCP") from exc
 
-        return message.content or "", last_data
+        return message.content or "", last_data, tool_calls_trace
