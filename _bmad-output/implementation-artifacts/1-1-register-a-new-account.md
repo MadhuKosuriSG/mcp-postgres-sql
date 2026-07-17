@@ -52,6 +52,24 @@ so that I have a persisted identity the system can build login and permissions o
   - [x] Call `auth_service.register(...)`, return `201` with `RegisterResponse`
   - [x] Mount router in `main.py` via `app.include_router(auth_router)`, matching the existing `chat_router`/`mcp_router` pattern
 
+### Review Findings
+
+- [ ] [Review][Patch] Migration only ALTERs a table, never CREATEs one — fails on any fresh/CI/production DB [alembic/versions/565523b9e716_create_users_table.py]
+- [ ] [Review][Patch] `AsyncEngine` constructed at module-import time instead of via `lifespan`/`app.state` — violates binding AD-8 [core/db.py, main.py]
+- [ ] [Review][Patch] `build_async_database_uri` only handles literal `postgresql://`, not `postgres://` or a URI with a driver already specified [core/db.py:6-7]
+- [ ] [Review][Patch] Unset `DATABASE_URI` crashes with an unclear `AttributeError` instead of a clear config error [core/db.py, alembic/env.py]
+- [x] [Review][Defer] `mcp_manager.initialize()` raising before `yield` leaves `shutdown()`/`dispose_engine()` unreached [main.py] — deferred, pre-existing lifespan structure predates this story
+- [x] [Review][Defer] No case normalization on email/username uniqueness (`Foo@x.com` vs `foo@x.com`) [core/models.py] — deferred, this is Story 1.2's uniqueness-enforcement decision to make, not Story 1.1's
+- [x] [Review][Dismiss] No rollback in `get_db()` on commit failure — `async with SessionLocal()` already rolls back via `close()` on exception, no explicit handling needed
+- [x] [Review][Dismiss] No duplicate-email/username handling (raw 500 on `IntegrityError`) — explicitly Story 1.2's scope, documented in this story's own Dev Notes
+- [x] [Review][Dismiss] No password/email/username format or length validation — explicitly Story 1.3's scope, documented in this story's own Dev Notes
+- [x] [Review][Dismiss] `RegisterResponse` returns a sequential integer `id` (info disclosure) — this exact response shape (`id`, `email`) is mandated by the binding Architecture spec
+- [x] [Review][Dismiss] No rate limiting/abuse controls on the endpoint — explicitly accepted gap per PRD §6.2
+- [x] [Review][Dismiss] Leftover `# <-- This was missing` comment in `main.py` — pre-existing code, not part of this story's diff
+- [x] [Review][Dismiss] Acceptance Auditor's claim that the `%`-escaping fix lacks a documenting comment in `alembic/env.py` — verified false; the comment is present at env.py:25
+- [x] [Review][Dismiss] `alembic.ini`'s `sqlalchemy.url` compliance was unverifiable from the reviewed diff — verified directly: placeholder value intact, no credential committed
+- [x] [Review][Dismiss] `asyncio.run()` in `run_migrations_online()` fails if called from a running event loop — already mitigated by design: this story's Dev Notes mandate running migrations as a standalone CLI step, never from within the app's `lifespan`
+
 ## Dev Notes
 
 - **Architecture compliance (binding — [Source: ARCHITECTURE-SPINE.md#AD-1 through AD-8]):** registration models a persisted `User` identity, not a shared secret. Auth owns direct Postgres access via `core/db.py`; `postgres-mcp` is never used for auth reads/writes. No login/JWT/session store this pass. File placement is fixed: router in `api/auth.py`, business logic in `services/auth_service.py`, DB infra in `core/db.py`/`core/models.py`. All DB access is async (no sync engine anywhere). Engine lifecycle is via FastAPI `lifespan`; session is per-request via `Depends`, never shared/singleton.
